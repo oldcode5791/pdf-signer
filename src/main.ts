@@ -14,14 +14,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-// Initial app shell with hero onboarding card and dual-mode guidance prompts
+// Initial app shell with hero onboarding card, success dialog, and support link
 app.innerHTML = `
-  <div class="min-h-screen bg-slate-900 text-slate-200 flex flex-col h-screen overflow-hidden">
+  <div class="min-h-screen bg-slate-900 text-slate-200 flex flex-col h-screen overflow-hidden relative">
     <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shrink-0 z-10 shadow-md">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-        </div>
+        <button id="btn-home" class="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 hover:bg-indigo-600/30 transition-colors" title="Return to Home">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
+        </button>
         <span class="text-base font-semibold tracking-tight text-white">PDF Signer Core</span>
       </div>
 
@@ -82,7 +82,7 @@ app.innerHTML = `
 
     <!-- Disappearing toast guidance -->
     <div id="placement-toast" class="opacity-0 pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-indigo-600/95 backdrop-blur text-white text-sm font-medium px-5 py-2.5 rounded-full shadow-2xl transition-all duration-300 flex items-center gap-2 border border-indigo-400/30">
-      <svg id="toast-icon-bounce" class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+      <svg class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
       <span id="placement-toast-text"></span>
     </div>
 
@@ -90,18 +90,60 @@ app.innerHTML = `
     <div id="cursor-tooltip" class="hidden fixed pointer-events-none z-50 bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap transition-opacity">
       Place Signature Here
     </div>
+
+    <!-- Post-Export Success Modal -->
+    <div id="success-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm transition-opacity">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-8 shadow-2xl flex flex-col items-center text-center">
+        <div class="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mb-5">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        </div>
+        
+        <h3 class="text-xl font-bold text-white mb-2">Signed PDF Downloaded!</h3>
+        <p class="text-slate-400 text-sm mb-6">Your modified document has been downloaded directly to your device. No files were stored on any server.</p>
+
+        <div class="flex flex-col gap-3 w-full">
+          <button id="btn-sign-another" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-3 px-6 rounded-xl shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.01] active:scale-[0.99] flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+            Sign Another Document
+          </button>
+          <button id="btn-keep-editing" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-2.5 px-6 rounded-xl border border-slate-700 transition-colors">
+            Keep Editing This File
+          </button>
+        </div>
+
+        <!-- Non-obtrusive Buy Me a Coffee Callout in Modal -->
+        <div class="mt-6 pt-5 border-t border-slate-800/80 w-full flex flex-col items-center">
+          <p class="text-xs text-slate-400 mb-3">Saved you a $20/month subscription?</p>
+          <a href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/30 transition-all hover:scale-105">
+            <span class="text-base">☕</span>
+            <span>Buy Me a Coffee</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Persistent Subtle Bottom-Right Support Badge -->
+    <a href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="fixed bottom-4 right-4 z-30 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-amber-300 text-xs font-medium border border-slate-800 hover:border-amber-500/30 shadow-lg backdrop-blur transition-all" title="Support this free project">
+      <span>☕</span>
+      <span class="hidden sm:inline">Support tool</span>
+    </a>
   </div>
 `;
 
 // Element references
 const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-const dropZone = document.getElementById('drop-zone') as HTMLDivElement;
 const container = document.getElementById('document-container') as HTMLDivElement;
+const btnHome = document.getElementById('btn-home') as HTMLButtonElement;
 const btnSign = document.getElementById('btn-sign') as HTMLButtonElement;
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const cursorTooltip = document.getElementById('cursor-tooltip') as HTMLDivElement;
 const placementToast = document.getElementById('placement-toast') as HTMLDivElement;
 const placementToastText = document.getElementById('placement-toast-text') as HTMLSpanElement;
+
+// Modal references
+const successModal = document.getElementById('success-modal') as HTMLDivElement;
+const btnSignAnother = document.getElementById('btn-sign-another') as HTMLButtonElement;
+const btnKeepEditing = document.getElementById('btn-keep-editing') as HTMLButtonElement;
 
 let activeSignaturePng: string | null = null;
 export let rawPdfBuffer: ArrayBuffer | null = null; 
@@ -126,6 +168,59 @@ const hideNotification = () => {
   }
 };
 
+// Reset application state back to landing hero
+const resetToHome = () => {
+  rawPdfBuffer = null;
+  activeSignaturePng = null;
+  fileInput.value = '';
+  
+  btnSign.classList.add('hidden');
+  btnExport.classList.add('hidden');
+  btnExport.classList.remove('animate-pulse', 'ring-2', 'ring-emerald-400');
+  btnSign.classList.remove('animate-pulse');
+  
+  hideNotification();
+  cursorTooltip.classList.add('hidden');
+  successModal.classList.add('hidden');
+
+  container.classList.add('justify-center');
+  container.innerHTML = `
+    <div id="drop-zone" class="w-full max-w-xl bg-slate-900/90 border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-3xl p-10 text-center transition-all shadow-2xl flex flex-col items-center">
+      <div class="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-6">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+      </div>
+
+      <h2 class="text-2xl font-bold text-white mb-2">Sign PDF Documents Safely</h2>
+      <p class="text-slate-400 text-sm max-w-sm mb-6">Drag and drop your PDF here, or select a file from your device to begin signing immediately.</p>
+
+      <label for="file-upload" class="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-base py-3 px-8 rounded-xl shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] inline-flex items-center gap-2 mb-8">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+        Select PDF Document
+      </label>
+
+      <div class="grid grid-cols-3 gap-4 w-full pt-6 border-t border-slate-800 text-xs text-slate-400">
+        <div class="flex flex-col items-center">
+          <span class="font-semibold text-slate-300 mb-1">1. Choose</span>
+          <span>Open your PDF</span>
+        </div>
+        <div class="flex flex-col items-center">
+          <span class="font-semibold text-slate-300 mb-1">2. Sign</span>
+          <span>Draw or type</span>
+        </div>
+        <div class="flex flex-col items-center">
+          <span class="font-semibold text-slate-300 mb-1">3. Download</span>
+          <span>Export clean copy</span>
+        </div>
+      </div>
+
+      <div class="mt-6 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+        100% Private: Documents never leave your browser
+      </div>
+    </div>
+  `;
+};
+
 const handleFile = async (file: File) => {
   if (file.type !== 'application/pdf') {
     alert('Invalid format. Please supply a standard PDF document.');
@@ -146,7 +241,6 @@ const handleFile = async (file: File) => {
     // Add pulsing call-to-action ring to the sign button
     btnSign.classList.add('animate-pulse');
 
-    // Display clear instructional prompt upon document load
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     const actionVerb = isTouch ? 'Tap' : 'Click';
     showNotification(`${actionVerb} anywhere on the document or click "Create Signature" to sign`, 7000);
@@ -171,18 +265,36 @@ fileInput.addEventListener('change', (e) => {
   if (file) handleFile(file);
 });
 
+btnHome.addEventListener('click', () => {
+  if (rawPdfBuffer && !confirm('Are you sure you want to close this document and return home?')) {
+    return;
+  }
+  resetToHome();
+});
+
+btnSignAnother.addEventListener('click', () => {
+  resetToHome();
+});
+
+btnKeepEditing.addEventListener('click', () => {
+  successModal.classList.add('hidden');
+});
+
 container.addEventListener('dragover', (e) => {
   e.preventDefault();
-  dropZone?.classList.add('border-indigo-500', 'bg-slate-800');
+  const dz = document.getElementById('drop-zone');
+  dz?.classList.add('border-indigo-500', 'bg-slate-800');
 });
 container.addEventListener('dragleave', (e) => {
   e.preventDefault();
-  dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
+  const dz = document.getElementById('drop-zone');
+  dz?.classList.remove('border-indigo-500', 'bg-slate-800');
 });
 
 container.addEventListener('drop', (e) => {
   e.preventDefault();
-  dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
+  const dz = document.getElementById('drop-zone');
+  dz?.classList.remove('border-indigo-500', 'bg-slate-800');
   const file = e.dataTransfer?.files?.[0];
   if (file) handleFile(file);
 });
@@ -204,13 +316,14 @@ btnSign.addEventListener('click', async () => {
 btnExport.addEventListener('click', async () => {
   if (!rawPdfBuffer) return;
   
-  // Clear any pulsing on the export button once activated
   btnExport.classList.remove('animate-pulse', 'ring-2', 'ring-emerald-400');
   btnExport.textContent = 'Processing...';
   btnExport.classList.add('opacity-75', 'cursor-not-allowed');
   
   try {
     await exportSignedPdf(rawPdfBuffer);
+    // Show download confirmation and next step modal
+    successModal.classList.remove('hidden');
   } catch (err) {
     console.error(err);
     alert('Something went wrong while saving the PDF.');
@@ -303,12 +416,10 @@ container.addEventListener('click', (e) => {
     
     pageWrapper.appendChild(sigWrapper);
     
-    // Reset signature drawing state
     activeSignaturePng = null;
     cursorTooltip.classList.add('hidden');
     container.classList.remove('cursor-crosshair');
     
-    // Highlight the Export button and notify the user to export
     btnExport.classList.add('animate-pulse', 'ring-2', 'ring-emerald-400');
     showNotification("Signature placed! Click 'Export PDF' when you're ready to download.", 6000);
   }
