@@ -14,7 +14,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-// Initial app shell with hero onboarding card, success dialog, and support link
+// Initial app shell with hero onboarding card, success dialog, and prominent support button
 app.innerHTML = `
   <div class="min-h-screen bg-slate-900 text-slate-200 flex flex-col h-screen overflow-hidden relative">
     <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shrink-0 z-10 shadow-md">
@@ -111,21 +111,21 @@ app.innerHTML = `
           </button>
         </div>
 
-        <!-- Non-obtrusive Buy Me a Coffee Callout in Modal -->
+        <!-- Buy Me a Coffee Callout in Modal -->
         <div class="mt-6 pt-5 border-t border-slate-800/80 w-full flex flex-col items-center">
           <p class="text-xs text-slate-400 mb-3">Saved you a $20/month subscription?</p>
-          <a href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold border border-amber-500/30 transition-all hover:scale-105">
-            <span class="text-base">☕</span>
+          <a href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 text-sm font-semibold border border-amber-500/40 transition-all hover:scale-105 shadow-md">
+            <span class="text-lg">☕</span>
             <span>Buy Me a Coffee</span>
           </a>
         </div>
       </div>
     </div>
 
-    <!-- Persistent Subtle Bottom-Right Support Badge -->
-    <a href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="fixed bottom-4 right-4 z-30 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-amber-300 text-xs font-medium border border-slate-800 hover:border-amber-500/30 shadow-lg backdrop-blur transition-all" title="Support this free project">
-      <span>☕</span>
-      <span class="hidden sm:inline">Support tool</span>
+    <!-- Larger, eye-catching bottom-right Support Button -->
+    <a id="btn-support-pill" href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-900/95 hover:bg-slate-800 text-amber-300 font-medium text-sm border-2 border-amber-500/40 hover:border-amber-400 shadow-xl backdrop-blur transition-all duration-300 hover:scale-105" title="Support the project on Buy Me a Coffee">
+      <span class="text-lg leading-none">☕</span>
+      <span>Support the dev</span>
     </a>
   </div>
 `;
@@ -139,6 +139,7 @@ const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const cursorTooltip = document.getElementById('cursor-tooltip') as HTMLDivElement;
 const placementToast = document.getElementById('placement-toast') as HTMLDivElement;
 const placementToastText = document.getElementById('placement-toast-text') as HTMLSpanElement;
+const btnSupportPill = document.getElementById('btn-support-pill') as HTMLAnchorElement;
 
 // Modal references
 const successModal = document.getElementById('success-modal') as HTMLDivElement;
@@ -148,6 +149,17 @@ const btnKeepEditing = document.getElementById('btn-keep-editing') as HTMLButton
 let activeSignaturePng: string | null = null;
 export let rawPdfBuffer: ArrayBuffer | null = null; 
 let toastTimer: number | null = null;
+
+// Flash the support button on initial load to draw the eye
+const flashSupportButton = () => {
+  if (!btnSupportPill) return;
+  btnSupportPill.classList.add('animate-pulse', 'ring-4', 'ring-amber-400/50', 'border-amber-400');
+  setTimeout(() => {
+    btnSupportPill.classList.remove('animate-pulse', 'ring-4', 'ring-amber-400/50');
+  }, 4500);
+};
+
+flashSupportButton();
 
 // Notification helper
 const showNotification = (message: string, durationMs = 6000) => {
@@ -322,7 +334,6 @@ btnExport.addEventListener('click', async () => {
   
   try {
     await exportSignedPdf(rawPdfBuffer);
-    // Show download confirmation and next step modal
     successModal.classList.remove('hidden');
   } catch (err) {
     console.error(err);
