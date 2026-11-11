@@ -14,7 +14,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-// Initial app shell with modern hero onboarding card
+// Initial app shell with hero onboarding card and dual-mode guidance prompts
 app.innerHTML = `
   <div class="min-h-screen bg-slate-900 text-slate-200 flex flex-col h-screen overflow-hidden">
     <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shrink-0 z-10 shadow-md">
@@ -29,7 +29,7 @@ app.innerHTML = `
         <button id="btn-export" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors shadow-sm">
           Export PDF
         </button>
-        <button id="btn-sign" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors shadow-sm">
+        <button id="btn-sign" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-all shadow-sm ring-2 ring-indigo-400/50">
           Create Signature
         </button>
         <label id="header-upload-label" class="cursor-pointer bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors border border-slate-600">
@@ -80,10 +80,10 @@ app.innerHTML = `
       </div>
     </main>
 
-    <!-- Disappearing toast guidance for touch/stylus and desktop placement -->
+    <!-- Disappearing toast guidance -->
     <div id="placement-toast" class="opacity-0 pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-indigo-600/95 backdrop-blur text-white text-sm font-medium px-5 py-2.5 rounded-full shadow-2xl transition-all duration-300 flex items-center gap-2 border border-indigo-400/30">
       <svg class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
-      <span id="placement-toast-text">Tap anywhere on the document to place your signature</span>
+      <span id="placement-toast-text"></span>
     </div>
 
     <!-- Mouse hover tooltip for desktop -->
@@ -107,20 +107,17 @@ let activeSignaturePng: string | null = null;
 export let rawPdfBuffer: ArrayBuffer | null = null; 
 let toastTimer: number | null = null;
 
-const showPlacementNotification = () => {
-  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  placementToastText.textContent = isTouchDevice 
-    ? 'Tap document to place signature' 
-    : 'Click document to place signature';
-    
+// Notification helper
+const showNotification = (message: string, durationMs = 6000) => {
+  placementToastText.textContent = message;
   placementToast.classList.remove('opacity-0', '-translate-y-2');
   placementToast.classList.add('opacity-100', 'translate-y-0');
 
   if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => hidePlacementNotification(), 6000);
+  toastTimer = window.setTimeout(() => hideNotification(), durationMs);
 };
 
-const hidePlacementNotification = () => {
+const hideNotification = () => {
   placementToast.classList.remove('opacity-100', 'translate-y-0');
   placementToast.classList.add('opacity-0', '-translate-y-2');
   if (toastTimer) {
@@ -135,7 +132,6 @@ const handleFile = async (file: File) => {
     return;
   }
   
-  // Transition main viewport to rendering layout
   container.classList.remove('justify-center');
   container.innerHTML = '<div class="text-indigo-400 mt-20 animate-pulse font-mono text-sm">Loading document...</div>';
   
@@ -143,9 +139,17 @@ const handleFile = async (file: File) => {
     rawPdfBuffer = await file.arrayBuffer();
     await renderDocument(rawPdfBuffer.slice(0), container);
     
-    // Reveal action buttons in the header
+    // Reveal action buttons
     btnSign.classList.remove('hidden');
     btnExport.classList.remove('hidden');
+    
+    // Add pulsing call-to-action ring to the sign button
+    btnSign.classList.add('animate-pulse');
+
+    // Display clear instructional prompt upon document load
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    const actionVerb = isTouch ? 'Tap' : 'Click';
+    showNotification(`${actionVerb} anywhere on the document or click "Create Signature" to sign`, 7000);
   } catch (error) {
     console.error(error);
     container.innerHTML = '<div class="text-red-400 mt-20 font-mono text-sm">Error: Could not read the document.</div>';
@@ -184,12 +188,17 @@ container.addEventListener('drop', (e) => {
 });
 
 btnSign.addEventListener('click', async () => {
+  // Remove pulsing ring once engaged
+  btnSign.classList.remove('animate-pulse');
+  
   const signatureData = await openSignaturePad();
   if (signatureData) {
     activeSignaturePng = signatureData;
     cursorTooltip.classList.remove('hidden');
     container.classList.add('cursor-crosshair');
-    showPlacementNotification();
+    
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    showNotification(isTouch ? 'Tap document to place signature' : 'Click document to place signature');
   }
 });
 
@@ -296,6 +305,6 @@ container.addEventListener('click', (e) => {
     activeSignaturePng = null;
     cursorTooltip.classList.add('hidden');
     container.classList.remove('cursor-crosshair');
-    hidePlacementNotification();
+    hideNotification();
   }
 });
