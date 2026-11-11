@@ -15,7 +15,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 // Grab the main empty box on our webpage where the app will live
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-// Build the screen (the top menu and the drag-and-drop box)
+// Build the screen (top menu, drag-and-drop box, and floating toast notifications)
 app.innerHTML = `
   <div class="min-h-screen bg-slate-900 text-slate-200 flex flex-col h-screen overflow-hidden">
     <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shrink-0 z-10 shadow-md">
@@ -37,7 +37,7 @@ app.innerHTML = `
       </div>
     </header>
     
-    <main id="document-container" class="flex-1 overflow-y-auto bg-slate-950 p-8 flex flex-col items-center cursor-default">
+    <main id="document-container" class="flex-1 overflow-y-auto bg-slate-950 p-8 flex flex-col items-center cursor-default relative">
       <div id="drop-zone" class="w-full max-w-2xl border-2 border-dashed border-slate-700 rounded-2xl p-12 text-center text-slate-400 mt-20 flex flex-col items-center justify-center transition-colors">
         <svg class="w-12 h-12 text-slate-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
         <p class="text-lg font-medium text-slate-300">Drag and drop a PDF here</p>
@@ -45,7 +45,13 @@ app.innerHTML = `
       </div>
     </main>
 
-    <!-- Floating tooltip for desktop mouse pointer -->
+    <!-- Disappearing toast guidance for touch/stylus and desktop placement -->
+    <div id="placement-toast" class="opacity-0 pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-indigo-600/95 backdrop-blur text-white text-sm font-medium px-5 py-2.5 rounded-full shadow-2xl transition-all duration-300 flex items-center gap-2 border border-indigo-400/30">
+      <svg class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+      <span id="placement-toast-text">Tap anywhere on the document to place your signature</span>
+    </div>
+
+    <!-- Mouse hover tooltip for desktop -->
     <div id="cursor-tooltip" class="hidden fixed pointer-events-none z-50 bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap transition-opacity">
       Place Signature Here
     </div>
@@ -59,11 +65,38 @@ const container = document.getElementById('document-container') as HTMLDivElemen
 const btnSign = document.getElementById('btn-sign') as HTMLButtonElement;
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const cursorTooltip = document.getElementById('cursor-tooltip') as HTMLDivElement;
+const placementToast = document.getElementById('placement-toast') as HTMLDivElement;
+const placementToastText = document.getElementById('placement-toast-text') as HTMLSpanElement;
 
 let activeSignaturePng: string | null = null;
 export let rawPdfBuffer: ArrayBuffer | null = null; 
+let toastTimer: number | null = null;
 
-// What happens when someone gives us a file
+// Helpers to show and hide the floating guidance toast
+const showPlacementNotification = () => {
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  placementToastText.textContent = isTouchDevice 
+    ? 'Tap document to place signature' 
+    : 'Click document to place signature';
+    
+  placementToast.classList.remove('opacity-0', '-translate-y-2');
+  placementToast.classList.add('opacity-100', 'translate-y-0');
+
+  if (toastTimer) clearTimeout(toastTimer);
+  // Auto-dismiss after 6 seconds if not placed
+  toastTimer = window.setTimeout(() => hidePlacementNotification(), 6000);
+};
+
+const hidePlacementNotification = () => {
+  placementToast.classList.remove('opacity-100', 'translate-y-0');
+  placementToast.classList.add('opacity-0', '-translate-y-2');
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+};
+
+// Handle PDF loading
 const handleFile = async (file: File) => {
   if (file.type !== 'application/pdf') {
     alert('Invalid format. Please supply a standard PDF.');
@@ -80,160 +113,4 @@ const handleFile = async (file: File) => {
     btnExport.classList.remove('hidden');
   } catch (error) {
     console.error(error);
-    container.innerHTML = '<div class="text-red-400 mt-20 font-mono text-sm">Error: Could not read the document.</div>';
-  }
-};
-
-window.addEventListener('dragover', (e) => e.preventDefault());
-window.addEventListener('drop', (e) => e.preventDefault());
-
-// Tooltip positioning
-window.addEventListener('pointermove', (e) => {
-  if (activeSignaturePng && e.pointerType === 'mouse') {
-    cursorTooltip.style.left = `${e.clientX + 15}px`;
-    cursorTooltip.style.top = `${e.clientY + 15}px`;
-  }
-});
-
-fileInput.addEventListener('change', (e) => {
-  const file = (e.target as HTMLInputElement).files?.[0];
-  if (file) handleFile(file);
-});
-
-container.addEventListener('dragover', (e) => {
-  e.preventDefault();
-  dropZone?.classList.add('border-indigo-500', 'bg-slate-800');
-});
-container.addEventListener('dragleave', (e) => {
-  e.preventDefault();
-  dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
-});
-
-container.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
-  const file = e.dataTransfer?.files?.[0];
-  if (file) handleFile(file);
-});
-
-// What happens when you click "Create Signature"
-btnSign.addEventListener('click', async () => {
-  const signatureData = await openSignaturePad();
-  if (signatureData) {
-    activeSignaturePng = signatureData;
-    cursorTooltip.classList.remove('hidden');
-    container.classList.add('cursor-crosshair');
-  }
-});
-
-// What happens when you click "Export PDF"
-btnExport.addEventListener('click', async () => {
-  if (!rawPdfBuffer) return;
-  
-  btnExport.textContent = 'Processing...';
-  btnExport.classList.add('opacity-75', 'cursor-not-allowed');
-  
-  try {
-    await exportSignedPdf(rawPdfBuffer);
-  } catch (err) {
-    console.error(err);
-    alert('Something went wrong while saving the PDF.');
-  } finally {
-    btnExport.textContent = 'Export PDF';
-    btnExport.classList.remove('opacity-75', 'cursor-not-allowed');
-  }
-});
-
-// Click/tap on document page to stamp or trigger signature creation
-container.addEventListener('click', (e) => {
-  const target = e.target as HTMLElement;
-  
-  if (target.closest('.sig-wrapper')) return;
-  
-  const pageWrapper = target.closest('.page-wrapper') as HTMLElement;
-  
-  if (!activeSignaturePng) {
-    if (pageWrapper && rawPdfBuffer) {
-      btnSign.click();
-    }
-    return;
-  }
-  
-  if (pageWrapper) {
-    const rect = pageWrapper.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-    
-    const sigWrapper = document.createElement('div');
-    // touch-none tells iOS/Android browsers not to scroll while touching this element
-    sigWrapper.className = 'absolute cursor-move border-2 border-transparent hover:border-indigo-500/50 rounded transition-colors z-20 sig-wrapper touch-none select-none';
-    
-    sigWrapper.style.left = `${x - 75}px`; 
-    sigWrapper.style.top = `${y - 40}px`;
-    sigWrapper.style.width = '150px'; 
-    sigWrapper.style.height = '80px';
-    sigWrapper.style.resize = 'both';
-    sigWrapper.style.overflow = 'hidden';
-    sigWrapper.style.minWidth = '50px';
-    sigWrapper.style.minHeight = '30px';
-    
-    const sigImg = document.createElement('img');
-    sigImg.src = activeSignaturePng;
-    sigImg.className = 'w-full h-full object-contain pointer-events-none select-none';
-    sigImg.draggable = false;
-    
-    sigWrapper.appendChild(sigImg);
-    
-    // --- Unified Pointer Events for Stylus, Touch & Mouse ---
-    let isDragging = false;
-    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
-    
-    sigWrapper.addEventListener('pointerdown', (dragEvent: PointerEvent) => {
-      const wrapRect = sigWrapper.getBoundingClientRect();
-      // Check if user is grabbing the bottom-right resize corner
-      const isResizeZone = dragEvent.clientX >= wrapRect.right - 24 && dragEvent.clientY >= wrapRect.bottom - 24;
-      if (isResizeZone) return; 
-      
-      dragEvent.preventDefault();
-      dragEvent.stopPropagation();
-      
-      isDragging = true;
-      startX = dragEvent.clientX;
-      startY = dragEvent.clientY;
-      startLeft = parseInt(sigWrapper.style.left || '0', 10);
-      startTop = parseInt(sigWrapper.style.top || '0', 10);
-      
-      // Captures the pointer so fast finger/stylus swipes don't break tracking
-      sigWrapper.setPointerCapture(dragEvent.pointerId);
-    });
-    
-    sigWrapper.addEventListener('pointermove', (moveEvent: PointerEvent) => {
-      if (!isDragging) return;
-      moveEvent.preventDefault();
-      
-      const dx = moveEvent.clientX - startX;
-      const dy = moveEvent.clientY - startY;
-      sigWrapper.style.left = `${startLeft + dx}px`;
-      sigWrapper.style.top = `${startTop + dy}px`;
-    });
-    
-    const stopDragging = (endEvent: PointerEvent) => {
-      if (!isDragging) return;
-      isDragging = false;
-      try {
-        sigWrapper.releasePointerCapture(endEvent.pointerId);
-      } catch {
-        // Element might already be released
-      }
-    };
-
-    sigWrapper.addEventListener('pointerup', stopDragging);
-    sigWrapper.addEventListener('pointercancel', stopDragging);
-    
-    pageWrapper.appendChild(sigWrapper);
-    
-    activeSignaturePng = null;
-    cursorTooltip.classList.add('hidden');
-    container.classList.remove('cursor-crosshair');
-  }
-});
+    container.innerHTML = '<div class="text-red-400 mt-2
