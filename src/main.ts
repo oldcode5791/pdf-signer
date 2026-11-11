@@ -1,8 +1,8 @@
 import './style.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import { renderDocument } from './renderer';
+import { openSignaturePad } from './signature';
 
-// Hook the worker to the Vite asset pipeline
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
@@ -10,7 +10,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-// Scaffold the primary UI matrix
 app.innerHTML = `
   <div class="min-h-screen bg-slate-900 text-slate-200 flex flex-col h-screen overflow-hidden">
     <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shrink-0 z-10 shadow-md">
@@ -18,8 +17,11 @@ app.innerHTML = `
         <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
         PDF Signer Core
       </h1>
-      <div>
-        <label class="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors">
+      <div class="flex gap-3">
+        <button id="btn-sign" class="hidden bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors border border-slate-600">
+          Create Signature
+        </button>
+        <label class="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors shadow-sm">
           Load PDF
           <input type="file" id="file-upload" class="hidden" accept="application/pdf" />
         </label>
@@ -36,31 +38,36 @@ app.innerHTML = `
   </div>
 `;
 
-// Map interface elements
 const fileInput = document.getElementById('file-upload') as HTMLInputElement;
 const dropZone = document.getElementById('drop-zone') as HTMLDivElement;
 const container = document.getElementById('document-container') as HTMLDivElement;
+const btnSign = document.getElementById('btn-sign') as HTMLButtonElement;
 
-// Core ingestion diagnostic
+// Maintain temporary state of the active signature
+let activeSignaturePng: string | null = null;
+
 const handleFile = async (file: File) => {
   if (file.type !== 'application/pdf') {
     alert('Invalid format. Please supply a standard PDF.');
     return;
   }
   
-  // Wipe container and show loading state
   container.innerHTML = '<div class="text-indigo-400 mt-20 animate-pulse font-mono text-sm">Initializing document matrix...</div>';
   
   try {
     const arrayBuffer = await file.arrayBuffer();
     await renderDocument(arrayBuffer, container);
+    
+    // Uncloak the signature button once a document is successfully loaded
+    btnSign.classList.remove('hidden');
   } catch (error) {
     console.error(error);
     container.innerHTML = '<div class="text-red-400 mt-20 font-mono text-sm">Diagnostic failure: Unable to parse document stream.</div>';
   }
 };
 
-// Wire up event listeners
+// --- Event Listeners ---
+
 fileInput.addEventListener('change', (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (file) handleFile(file);
@@ -81,4 +88,15 @@ container.addEventListener('drop', (e) => {
   dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
   const file = e.dataTransfer?.files?.[0];
   if (file) handleFile(file);
+});
+
+// Signature pad engagement
+btnSign.addEventListener('click', async () => {
+  const signatureData = await openSignaturePad();
+  if (signatureData) {
+    activeSignaturePng = signatureData;
+    // For Sprint 2 verification, we will just log the data URL payload length
+    console.log(`Signature captured: ${signatureData.substring(0, 50)}... [${signatureData.length} bytes]`);
+    alert('Signature captured successfully and stored in active memory.');
+  }
 });
