@@ -45,7 +45,7 @@ app.innerHTML = `
       </div>
     </main>
 
-    <!-- This is the tiny message that follows your mouse -->
+    <!-- Floating tooltip for desktop mouse pointer -->
     <div id="cursor-tooltip" class="hidden fixed pointer-events-none z-50 bg-indigo-600 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg whitespace-nowrap transition-opacity">
       Place Signature Here
     </div>
@@ -60,13 +60,11 @@ const btnSign = document.getElementById('btn-sign') as HTMLButtonElement;
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const cursorTooltip = document.getElementById('cursor-tooltip') as HTMLDivElement;
 
-// Memory to hold the picture of the signature and the raw PDF file
 let activeSignaturePng: string | null = null;
 export let rawPdfBuffer: ArrayBuffer | null = null; 
 
 // What happens when someone gives us a file
 const handleFile = async (file: File) => {
-  // Make sure it is actually a PDF
   if (file.type !== 'application/pdf') {
     alert('Invalid format. Please supply a standard PDF.');
     return;
@@ -75,12 +73,9 @@ const handleFile = async (file: File) => {
   container.innerHTML = '<div class="text-indigo-400 mt-20 animate-pulse font-mono text-sm">Loading document...</div>';
   
   try {
-    // Read the file and draw it on the screen
     rawPdfBuffer = await file.arrayBuffer();
-    // We make a copy of the file (.slice(0)) so it doesn't crash later when saving
     await renderDocument(rawPdfBuffer.slice(0), container);
     
-    // Show the hidden buttons now that a document is ready
     btnSign.classList.remove('hidden');
     btnExport.classList.remove('hidden');
   } catch (error) {
@@ -89,25 +84,22 @@ const handleFile = async (file: File) => {
   }
 };
 
-// Stop the web browser from opening the PDF taking over the whole tab when dragging
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
 
-// Make the tooltip follow the mouse when a signature is ready to be placed
-window.addEventListener('mousemove', (e) => {
-  if (activeSignaturePng) {
+// Tooltip positioning
+window.addEventListener('pointermove', (e) => {
+  if (activeSignaturePng && e.pointerType === 'mouse') {
     cursorTooltip.style.left = `${e.clientX + 15}px`;
     cursorTooltip.style.top = `${e.clientY + 15}px`;
   }
 });
 
-// Listen for when someone clicks "Load PDF"
 fileInput.addEventListener('change', (e) => {
   const file = (e.target as HTMLInputElement).files?.[0];
   if (file) handleFile(file);
 });
 
-// Make the drop zone change colour when a file is hovering over it
 container.addEventListener('dragover', (e) => {
   e.preventDefault();
   dropZone?.classList.add('border-indigo-500', 'bg-slate-800');
@@ -117,7 +109,6 @@ container.addEventListener('dragleave', (e) => {
   dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
 });
 
-// Listen for when someone drops a file in
 container.addEventListener('drop', (e) => {
   e.preventDefault();
   dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
@@ -129,7 +120,6 @@ container.addEventListener('drop', (e) => {
 btnSign.addEventListener('click', async () => {
   const signatureData = await openSignaturePad();
   if (signatureData) {
-    // Save the picture, show the tooltip, and change the mouse pointer
     activeSignaturePng = signatureData;
     cursorTooltip.classList.remove('hidden');
     container.classList.add('cursor-crosshair');
@@ -138,36 +128,30 @@ btnSign.addEventListener('click', async () => {
 
 // What happens when you click "Export PDF"
 btnExport.addEventListener('click', async () => {
-  if (!rawPdfBuffer) return; // Do nothing if there's no PDF
+  if (!rawPdfBuffer) return;
   
-  // Change the button text so the user knows it's working
   btnExport.textContent = 'Processing...';
   btnExport.classList.add('opacity-75', 'cursor-not-allowed');
   
   try {
-    // Send the file to the export code to be glued together
     await exportSignedPdf(rawPdfBuffer);
   } catch (err) {
     console.error(err);
     alert('Something went wrong while saving the PDF.');
   } finally {
-    // Change the button back when finished
     btnExport.textContent = 'Export PDF';
     btnExport.classList.remove('opacity-75', 'cursor-not-allowed');
   }
 });
 
-// What happens when you click on the actual document pages
+// Click/tap on document page to stamp or trigger signature creation
 container.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
   
-  // If you are clicking on a signature you already placed, do nothing
   if (target.closest('.sig-wrapper')) return;
   
-  // Find which specific page you clicked on
   const pageWrapper = target.closest('.page-wrapper') as HTMLElement;
   
-  // If you click a page but haven't made a signature yet, open the signature tool automatically
   if (!activeSignaturePng) {
     if (pageWrapper && rawPdfBuffer) {
       btnSign.click();
@@ -175,80 +159,79 @@ container.addEventListener('click', (e) => {
     return;
   }
   
-  // If you have a signature ready and clicked a page, place it!
   if (pageWrapper) {
-    // Figure out the exact X and Y math of where the mouse clicked on the page
     const rect = pageWrapper.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    // Create a special box to hold the signature so we can drag and resize it
     const sigWrapper = document.createElement('div');
-    sigWrapper.className = 'absolute cursor-move border-2 border-transparent hover:border-indigo-500/50 rounded transition-colors z-20 sig-wrapper';
+    // touch-none tells iOS/Android browsers not to scroll while touching this element
+    sigWrapper.className = 'absolute cursor-move border-2 border-transparent hover:border-indigo-500/50 rounded transition-colors z-20 sig-wrapper touch-none select-none';
     
-    // Put the box right where the mouse clicked (offset slightly so it centers on the pointer)
     sigWrapper.style.left = `${x - 75}px`; 
     sigWrapper.style.top = `${y - 40}px`;
     sigWrapper.style.width = '150px'; 
     sigWrapper.style.height = '80px';
-    
-    // Let the web browser add a drag handle to the bottom right corner for resizing
     sigWrapper.style.resize = 'both';
     sigWrapper.style.overflow = 'hidden';
     sigWrapper.style.minWidth = '50px';
     sigWrapper.style.minHeight = '30px';
     
-    // Put the actual picture of the signature inside our special box
     const sigImg = document.createElement('img');
     sigImg.src = activeSignaturePng;
-    sigImg.className = 'w-full h-full object-contain pointer-events-none';
-    sigImg.draggable = false; // Stop the browser from accidentally opening the picture
+    sigImg.className = 'w-full h-full object-contain pointer-events-none select-none';
+    sigImg.draggable = false;
     
     sigWrapper.appendChild(sigImg);
     
-    // --- The dragging code ---
+    // --- Unified Pointer Events for Stylus, Touch & Mouse ---
     let isDragging = false;
     let startX = 0, startY = 0, startLeft = 0, startTop = 0;
     
-    // When the mouse button is pressed down on the signature box
-    sigWrapper.addEventListener('mousedown', (dragEvent) => {
-      // Check if they are trying to click the bottom-right resize corner
+    sigWrapper.addEventListener('pointerdown', (dragEvent: PointerEvent) => {
       const wrapRect = sigWrapper.getBoundingClientRect();
-      const isResizeZone = dragEvent.clientX >= wrapRect.right - 20 && dragEvent.clientY >= wrapRect.bottom - 20;
-      
-      // If they are resizing, don't trigger the drag code
+      // Check if user is grabbing the bottom-right resize corner
+      const isResizeZone = dragEvent.clientX >= wrapRect.right - 24 && dragEvent.clientY >= wrapRect.bottom - 24;
       if (isResizeZone) return; 
       
       dragEvent.preventDefault();
       dragEvent.stopPropagation();
-      isDragging = true; // Turn dragging on
       
-      // Remember where the mouse started
+      isDragging = true;
       startX = dragEvent.clientX;
       startY = dragEvent.clientY;
       startLeft = parseInt(sigWrapper.style.left || '0', 10);
       startTop = parseInt(sigWrapper.style.top || '0', 10);
+      
+      // Captures the pointer so fast finger/stylus swipes don't break tracking
+      sigWrapper.setPointerCapture(dragEvent.pointerId);
     });
     
-    // When the mouse moves (while dragging is turned on)
-    window.addEventListener('mousemove', (moveEvent) => {
+    sigWrapper.addEventListener('pointermove', (moveEvent: PointerEvent) => {
       if (!isDragging) return;
-      // Calculate how far the mouse has moved and move the box the same amount
+      moveEvent.preventDefault();
+      
       const dx = moveEvent.clientX - startX;
       const dy = moveEvent.clientY - startY;
       sigWrapper.style.left = `${startLeft + dx}px`;
       sigWrapper.style.top = `${startTop + dy}px`;
     });
     
-    // When the mouse button is let go, turn dragging off
-    window.addEventListener('mouseup', () => {
+    const stopDragging = (endEvent: PointerEvent) => {
+      if (!isDragging) return;
       isDragging = false;
-    });
+      try {
+        sigWrapper.releasePointerCapture(endEvent.pointerId);
+      } catch {
+        // Element might already be released
+      }
+    };
+
+    sigWrapper.addEventListener('pointerup', stopDragging);
+    sigWrapper.addEventListener('pointercancel', stopDragging);
     
-    // Finally, stick the box onto the page
     pageWrapper.appendChild(sigWrapper);
     
-    // Wipe the memory clean so they have to make a new signature next time
     activeSignaturePng = null;
     cursorTooltip.classList.add('hidden');
     container.classList.remove('cursor-crosshair');
