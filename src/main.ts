@@ -50,7 +50,7 @@ app.innerHTML = `
         <h2 class="text-2xl font-bold text-white mb-2">Sign PDF Documents Safely</h2>
         <p class="text-slate-400 text-sm max-w-sm mb-6">Drag and drop your PDF here, or select a file from your device to begin signing immediately.</p>
 
-        <!-- Big, unmistakable call-to-action button -->
+        <!-- Big call-to-action button -->
         <label for="file-upload" class="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-base py-3 px-8 rounded-xl shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] inline-flex items-center gap-2 mb-8">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
           Select PDF Document
@@ -101,3 +101,201 @@ const btnSign = document.getElementById('btn-sign') as HTMLButtonElement;
 const btnExport = document.getElementById('btn-export') as HTMLButtonElement;
 const cursorTooltip = document.getElementById('cursor-tooltip') as HTMLDivElement;
 const placementToast = document.getElementById('placement-toast') as HTMLDivElement;
+const placementToastText = document.getElementById('placement-toast-text') as HTMLSpanElement;
+
+let activeSignaturePng: string | null = null;
+export let rawPdfBuffer: ArrayBuffer | null = null; 
+let toastTimer: number | null = null;
+
+const showPlacementNotification = () => {
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  placementToastText.textContent = isTouchDevice 
+    ? 'Tap document to place signature' 
+    : 'Click document to place signature';
+    
+  placementToast.classList.remove('opacity-0', '-translate-y-2');
+  placementToast.classList.add('opacity-100', 'translate-y-0');
+
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => hidePlacementNotification(), 6000);
+};
+
+const hidePlacementNotification = () => {
+  placementToast.classList.remove('opacity-100', 'translate-y-0');
+  placementToast.classList.add('opacity-0', '-translate-y-2');
+  if (toastTimer) {
+    clearTimeout(toastTimer);
+    toastTimer = null;
+  }
+};
+
+const handleFile = async (file: File) => {
+  if (file.type !== 'application/pdf') {
+    alert('Invalid format. Please supply a standard PDF document.');
+    return;
+  }
+  
+  // Transition main viewport to rendering layout
+  container.classList.remove('justify-center');
+  container.innerHTML = '<div class="text-indigo-400 mt-20 animate-pulse font-mono text-sm">Loading document...</div>';
+  
+  try {
+    rawPdfBuffer = await file.arrayBuffer();
+    await renderDocument(rawPdfBuffer.slice(0), container);
+    
+    // Reveal action buttons in the header
+    btnSign.classList.remove('hidden');
+    btnExport.classList.remove('hidden');
+  } catch (error) {
+    console.error(error);
+    container.innerHTML = '<div class="text-red-400 mt-20 font-mono text-sm">Error: Could not read the document.</div>';
+  }
+};
+
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
+
+window.addEventListener('pointermove', (e) => {
+  if (activeSignaturePng && e.pointerType === 'mouse') {
+    cursorTooltip.style.left = `${e.clientX + 15}px`;
+    cursorTooltip.style.top = `${e.clientY + 15}px`;
+  }
+});
+
+fileInput.addEventListener('change', (e) => {
+  const file = (e.target as HTMLInputElement).files?.[0];
+  if (file) handleFile(file);
+});
+
+container.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone?.classList.add('border-indigo-500', 'bg-slate-800');
+});
+container.addEventListener('dragleave', (e) => {
+  e.preventDefault();
+  dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
+});
+
+container.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone?.classList.remove('border-indigo-500', 'bg-slate-800');
+  const file = e.dataTransfer?.files?.[0];
+  if (file) handleFile(file);
+});
+
+btnSign.addEventListener('click', async () => {
+  const signatureData = await openSignaturePad();
+  if (signatureData) {
+    activeSignaturePng = signatureData;
+    cursorTooltip.classList.remove('hidden');
+    container.classList.add('cursor-crosshair');
+    showPlacementNotification();
+  }
+});
+
+btnExport.addEventListener('click', async () => {
+  if (!rawPdfBuffer) return;
+  
+  btnExport.textContent = 'Processing...';
+  btnExport.classList.add('opacity-75', 'cursor-not-allowed');
+  
+  try {
+    await exportSignedPdf(rawPdfBuffer);
+  } catch (err) {
+    console.error(err);
+    alert('Something went wrong while saving the PDF.');
+  } finally {
+    btnExport.textContent = 'Export PDF';
+    btnExport.classList.remove('opacity-75', 'cursor-not-allowed');
+  }
+});
+
+container.addEventListener('click', (e) => {
+  const target = e.target as HTMLElement;
+  
+  if (target.closest('.sig-wrapper')) return;
+  
+  const pageWrapper = target.closest('.page-wrapper') as HTMLElement;
+  
+  if (!activeSignaturePng) {
+    if (pageWrapper && rawPdfBuffer) {
+      btnSign.click();
+    }
+    return;
+  }
+  
+  if (pageWrapper) {
+    const rect = pageWrapper.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    const sigWrapper = document.createElement('div');
+    sigWrapper.className = 'absolute cursor-move border-2 border-transparent hover:border-indigo-500/50 rounded transition-colors z-20 sig-wrapper touch-none select-none';
+    
+    sigWrapper.style.left = `${x - 75}px`; 
+    sigWrapper.style.top = `${y - 40}px`;
+    sigWrapper.style.width = '150px'; 
+    sigWrapper.style.height = '80px';
+    sigWrapper.style.resize = 'both';
+    sigWrapper.style.overflow = 'hidden';
+    sigWrapper.style.minWidth = '50px';
+    sigWrapper.style.minHeight = '30px';
+    
+    const sigImg = document.createElement('img');
+    sigImg.src = activeSignaturePng;
+    sigImg.className = 'w-full h-full object-contain pointer-events-none select-none';
+    sigImg.draggable = false;
+    
+    sigWrapper.appendChild(sigImg);
+    
+    let isDragging = false;
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    
+    sigWrapper.addEventListener('pointerdown', (dragEvent: PointerEvent) => {
+      const wrapRect = sigWrapper.getBoundingClientRect();
+      const isResizeZone = dragEvent.clientX >= wrapRect.right - 24 && dragEvent.clientY >= wrapRect.bottom - 24;
+      if (isResizeZone) return; 
+      
+      dragEvent.preventDefault();
+      dragEvent.stopPropagation();
+      
+      isDragging = true;
+      startX = dragEvent.clientX;
+      startY = dragEvent.clientY;
+      startLeft = parseInt(sigWrapper.style.left || '0', 10);
+      startTop = parseInt(sigWrapper.style.top || '0', 10);
+      
+      sigWrapper.setPointerCapture(dragEvent.pointerId);
+    });
+    
+    sigWrapper.addEventListener('pointermove', (moveEvent: PointerEvent) => {
+      if (!isDragging) return;
+      moveEvent.preventDefault();
+      
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      sigWrapper.style.left = `${startLeft + dx}px`;
+      sigWrapper.style.top = `${startTop + dy}px`;
+    });
+    
+    const stopDragging = (endEvent: PointerEvent) => {
+      if (!isDragging) return;
+      isDragging = false;
+      try {
+        sigWrapper.releasePointerCapture(endEvent.pointerId);
+      } catch {
+        // Ignored if already released
+      }
+    };
+
+    sigWrapper.addEventListener('pointerup', stopDragging);
+    sigWrapper.addEventListener('pointercancel', stopDragging);
+    
+    pageWrapper.appendChild(sigWrapper);
+    
+    activeSignaturePng = null;
+    cursorTooltip.classList.add('hidden');
+    container.classList.remove('cursor-crosshair');
+    hidePlacementNotification();
+  }
+});
