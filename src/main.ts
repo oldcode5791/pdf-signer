@@ -26,7 +26,7 @@ app.innerHTML = `
       </div>
 
       <div class="flex items-center gap-3">
-        <button id="btn-export" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-colors shadow-sm">
+        <button id="btn-export" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-all shadow-sm">
           Export PDF
         </button>
         <button id="btn-sign" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium py-2 px-4 rounded-lg transition-all shadow-sm ring-2 ring-indigo-400/50">
@@ -82,7 +82,7 @@ app.innerHTML = `
 
     <!-- Disappearing toast guidance -->
     <div id="placement-toast" class="opacity-0 pointer-events-none fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-indigo-600/95 backdrop-blur text-white text-sm font-medium px-5 py-2.5 rounded-full shadow-2xl transition-all duration-300 flex items-center gap-2 border border-indigo-400/30">
-      <svg class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
+      <svg id="toast-icon-bounce" class="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path></svg>
       <span id="placement-toast-text"></span>
     </div>
 
@@ -188,7 +188,6 @@ container.addEventListener('drop', (e) => {
 });
 
 btnSign.addEventListener('click', async () => {
-  // Remove pulsing ring once engaged
   btnSign.classList.remove('animate-pulse');
   
   const signatureData = await openSignaturePad();
@@ -205,6 +204,8 @@ btnSign.addEventListener('click', async () => {
 btnExport.addEventListener('click', async () => {
   if (!rawPdfBuffer) return;
   
+  // Clear any pulsing on the export button once activated
+  btnExport.classList.remove('animate-pulse', 'ring-2', 'ring-emerald-400');
   btnExport.textContent = 'Processing...';
   btnExport.classList.add('opacity-75', 'cursor-not-allowed');
   
@@ -302,9 +303,13 @@ container.addEventListener('click', (e) => {
     
     pageWrapper.appendChild(sigWrapper);
     
+    // Reset signature drawing state
     activeSignaturePng = null;
     cursorTooltip.classList.add('hidden');
     container.classList.remove('cursor-crosshair');
-    hideNotification();
+    
+    // Highlight the Export button and notify the user to export
+    btnExport.classList.add('animate-pulse', 'ring-2', 'ring-emerald-400');
+    showNotification("Signature placed! Click 'Export PDF' when you're ready to download.", 6000);
   }
 });
