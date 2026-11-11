@@ -176,4 +176,80 @@ container.addEventListener('click', (e) => {
   
   // If you have a signature ready and clicked a page, place it!
   if (pageWrapper) {
-    // Figure out the exact X and Y math of where the mouse
+    // Figure out the exact X and Y math of where the mouse clicked on the page
+    const rect = pageWrapper.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    
+    // Create a special box to hold the signature so we can drag and resize it
+    const sigWrapper = document.createElement('div');
+    sigWrapper.className = 'absolute cursor-move border-2 border-transparent hover:border-indigo-500/50 rounded transition-colors z-20 sig-wrapper';
+    
+    // Put the box right where the mouse clicked (offset slightly so it centers on the pointer)
+    sigWrapper.style.left = `${x - 75}px`; 
+    sigWrapper.style.top = `${y - 40}px`;
+    sigWrapper.style.width = '150px'; 
+    sigWrapper.style.height = '80px';
+    
+    // Let the web browser add a drag handle to the bottom right corner for resizing
+    sigWrapper.style.resize = 'both';
+    sigWrapper.style.overflow = 'hidden';
+    sigWrapper.style.minWidth = '50px';
+    sigWrapper.style.minHeight = '30px';
+    
+    // Put the actual picture of the signature inside our special box
+    const sigImg = document.createElement('img');
+    sigImg.src = activeSignaturePng;
+    sigImg.className = 'w-full h-full object-contain pointer-events-none';
+    sigImg.draggable = false; // Stop the browser from accidentally opening the picture
+    
+    sigWrapper.appendChild(sigImg);
+    
+    // --- The dragging code ---
+    let isDragging = false;
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+    
+    // When the mouse button is pressed down on the signature box
+    sigWrapper.addEventListener('mousedown', (dragEvent) => {
+      // Check if they are trying to click the bottom-right resize corner
+      const wrapRect = sigWrapper.getBoundingClientRect();
+      const isResizeZone = dragEvent.clientX >= wrapRect.right - 20 && dragEvent.clientY >= wrapRect.bottom - 20;
+      
+      // If they are resizing, don't trigger the drag code
+      if (isResizeZone) return; 
+      
+      dragEvent.preventDefault();
+      dragEvent.stopPropagation();
+      isDragging = true; // Turn dragging on
+      
+      // Remember where the mouse started
+      startX = dragEvent.clientX;
+      startY = dragEvent.clientY;
+      startLeft = parseInt(sigWrapper.style.left || '0', 10);
+      startTop = parseInt(sigWrapper.style.top || '0', 10);
+    });
+    
+    // When the mouse moves (while dragging is turned on)
+    window.addEventListener('mousemove', (moveEvent) => {
+      if (!isDragging) return;
+      // Calculate how far the mouse has moved and move the box the same amount
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      sigWrapper.style.left = `${startLeft + dx}px`;
+      sigWrapper.style.top = `${startTop + dy}px`;
+    });
+    
+    // When the mouse button is let go, turn dragging off
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+    
+    // Finally, stick the box onto the page
+    pageWrapper.appendChild(sigWrapper);
+    
+    // Wipe the memory clean so they have to make a new signature next time
+    activeSignaturePng = null;
+    cursorTooltip.classList.add('hidden');
+    container.classList.remove('cursor-crosshair');
+  }
+});
