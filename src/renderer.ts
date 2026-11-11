@@ -59,6 +59,7 @@ export async function renderDocument(buffer: ArrayBuffer, container: HTMLElement
     container.appendChild(pageWrapper);
     
     // Tell the tool to finally paint the page!
+    // @ts-ignore
     await page.render(renderContext).promise;
   }
 }

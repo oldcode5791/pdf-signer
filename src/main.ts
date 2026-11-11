@@ -1,4 +1,5 @@
 // Bring in our styles and the tools we need to run the app
+// @ts-ignore
 import './style.css';
 import * as pdfjsLib from 'pdfjs-dist';
 import { renderDocument } from './renderer';

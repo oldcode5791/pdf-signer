@@ -71,6 +71,7 @@ export async function exportSignedPdf(originalBuffer: ArrayBuffer) {
   const pdfBytes = await pdfDoc.save();
 
   // The rest of this code tricks the web browser into downloading the file to your computer
+  // @ts-ignore
   const blob = new Blob([pdfBytes], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);
   
