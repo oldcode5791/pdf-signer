@@ -2,7 +2,13 @@
 // @ts-ignore
 import './style.css';
 import * as pdfjsLib from 'pdfjs-dist';
-import { renderDocument } from './renderer';
+import { 
+  renderDocument, 
+  clearRendererDoc, 
+  createSignatureElement, 
+  selectedSigWrapper, 
+  setSelectedSignature 
+} from './renderer';
 import { openSignaturePad } from './signature';
 import { exportSignedPdf } from './export';
 
@@ -14,7 +20,6 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 
-// Initial app shell with hero onboarding card, success dialog, and prominent support button
 app.innerHTML = `
   <div class="min-h-screen bg-slate-900 text-slate-200 flex flex-col h-screen overflow-hidden relative">
     <header class="h-16 bg-slate-800 border-b border-slate-700 flex items-center justify-between px-6 shrink-0 z-10 shadow-md">
@@ -22,7 +27,16 @@ app.innerHTML = `
         <button id="btn-home" class="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 hover:bg-indigo-600/30 transition-colors" title="Return to Home">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
         </button>
-        <span class="text-base font-semibold tracking-tight text-white">PDF Signer Core</span>
+        <span class="text-base font-semibold tracking-tight text-white hidden sm:inline">PDF Signer Core</span>
+      </div>
+
+      <!-- Zoom Controls -->
+      <div id="zoom-controls" class="hidden items-center gap-1.5 bg-slate-900/80 border border-slate-700 rounded-xl px-2 py-1 shadow-inner">
+        <button id="btn-zoom-out" class="w-7 h-7 rounded-lg hover:bg-slate-700 text-slate-300 font-bold flex items-center justify-center text-sm transition-colors" title="Zoom Out">−</button>
+        <span id="zoom-label" class="text-xs font-mono font-medium text-slate-300 min-w-[3.2rem] text-center select-none">100%</span>
+        <button id="btn-zoom-in" class="w-7 h-7 rounded-lg hover:bg-slate-700 text-slate-300 font-bold flex items-center justify-center text-sm transition-colors" title="Zoom In">+</button>
+        <div class="w-px h-4 bg-slate-700 mx-1"></div>
+        <button id="btn-zoom-fit" class="text-xs px-2 py-1 rounded-lg hover:bg-slate-700 text-indigo-300 font-medium transition-colors" title="Fit to Page">Fit</button>
       </div>
 
       <div class="flex items-center gap-3">
@@ -40,7 +54,6 @@ app.innerHTML = `
     </header>
     
     <main id="document-container" class="flex-1 overflow-y-auto bg-slate-950 p-8 flex flex-col items-center justify-center cursor-default relative">
-      <!-- Centered Onboarding Hero Card -->
       <div id="drop-zone" class="w-full max-w-xl bg-slate-900/90 border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-3xl p-10 text-center transition-all shadow-2xl flex flex-col items-center">
         
         <div class="w-16 h-16 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 mb-6">
@@ -50,13 +63,11 @@ app.innerHTML = `
         <h2 class="text-2xl font-bold text-white mb-2">Sign PDF Documents Safely</h2>
         <p class="text-slate-400 text-sm max-w-sm mb-6">Drag and drop your PDF here, or select a file from your device to begin signing immediately.</p>
 
-        <!-- Big call-to-action button -->
         <label for="file-upload" class="cursor-pointer bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-base py-3 px-8 rounded-xl shadow-lg shadow-indigo-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] inline-flex items-center gap-2 mb-8">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
           Select PDF Document
         </label>
 
-        <!-- 3-Step Mini Visual Flow -->
         <div class="grid grid-cols-3 gap-4 w-full pt-6 border-t border-slate-800 text-xs text-slate-400">
           <div class="flex flex-col items-center">
             <span class="font-semibold text-slate-300 mb-1">1. Choose</span>
@@ -72,7 +83,6 @@ app.innerHTML = `
           </div>
         </div>
 
-        <!-- Privacy Reassurance Badge -->
         <div class="mt-6 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-950/40 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
           100% Private: Documents never leave your browser
@@ -111,7 +121,6 @@ app.innerHTML = `
           </button>
         </div>
 
-        <!-- Buy Me a Coffee Callout in Modal -->
         <div class="mt-6 pt-5 border-t border-slate-800/80 w-full flex flex-col items-center">
           <p class="text-xs text-slate-400 mb-3">Saved you a $20/month subscription?</p>
           <a href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 text-sm font-semibold border border-amber-500/40 transition-all hover:scale-105 shadow-md">
@@ -122,7 +131,7 @@ app.innerHTML = `
       </div>
     </div>
 
-    <!-- Larger, eye-catching bottom-right Support Button -->
+    <!-- Support Button with Attention Pulse -->
     <a id="btn-support-pill" href="https://buymeacoffee.com/curiouslyso" target="_blank" rel="noopener noreferrer" class="fixed bottom-5 right-5 z-30 inline-flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-slate-900/95 hover:bg-slate-800 text-amber-300 font-medium text-sm border-2 border-amber-500/40 hover:border-amber-400 shadow-xl backdrop-blur transition-all duration-300 hover:scale-105" title="Support the project on Buy Me a Coffee">
       <span class="text-lg leading-none">☕</span>
       <span>Support the dev</span>
@@ -130,7 +139,7 @@ app.innerHTML = `
   </div>
 `;
 
-// Element references
+// References
 const fileInput = document.getElementById('file-upload') as HTMLInputElement;
 const container = document.getElementById('document-container') as HTMLDivElement;
 const btnHome = document.getElementById('btn-home') as HTMLButtonElement;
@@ -141,6 +150,13 @@ const placementToast = document.getElementById('placement-toast') as HTMLDivElem
 const placementToastText = document.getElementById('placement-toast-text') as HTMLSpanElement;
 const btnSupportPill = document.getElementById('btn-support-pill') as HTMLAnchorElement;
 
+// Zoom references
+const zoomControls = document.getElementById('zoom-controls') as HTMLDivElement;
+const btnZoomIn = document.getElementById('btn-zoom-in') as HTMLButtonElement;
+const btnZoomOut = document.getElementById('btn-zoom-out') as HTMLButtonElement;
+const btnZoomFit = document.getElementById('btn-zoom-fit') as HTMLButtonElement;
+const zoomLabel = document.getElementById('zoom-label') as HTMLSpanElement;
+
 // Modal references
 const successModal = document.getElementById('success-modal') as HTMLDivElement;
 const btnSignAnother = document.getElementById('btn-sign-another') as HTMLButtonElement;
@@ -148,9 +164,9 @@ const btnKeepEditing = document.getElementById('btn-keep-editing') as HTMLButton
 
 let activeSignaturePng: string | null = null;
 export let rawPdfBuffer: ArrayBuffer | null = null; 
+let currentScale = 1.0;
 let toastTimer: number | null = null;
 
-// Flash the support button on initial load to draw the eye
 const flashSupportButton = () => {
   if (!btnSupportPill) return;
   btnSupportPill.classList.add('animate-pulse', 'ring-4', 'ring-amber-400/50', 'border-amber-400');
@@ -158,10 +174,8 @@ const flashSupportButton = () => {
     btnSupportPill.classList.remove('animate-pulse', 'ring-4', 'ring-amber-400/50');
   }, 4500);
 };
-
 flashSupportButton();
 
-// Notification helper
 const showNotification = (message: string, durationMs = 6000) => {
   placementToastText.textContent = message;
   placementToast.classList.remove('opacity-0', '-translate-y-2');
@@ -180,14 +194,26 @@ const hideNotification = () => {
   }
 };
 
-// Reset application state back to landing hero
+const updateZoomLabel = () => {
+  zoomLabel.textContent = `${Math.round(currentScale * 100)}%`;
+};
+
+const renderPdfWithZoom = async (targetScale?: number) => {
+  if (!rawPdfBuffer) return;
+  currentScale = await renderDocument(rawPdfBuffer, container, targetScale);
+  updateZoomLabel();
+};
+
 const resetToHome = () => {
   rawPdfBuffer = null;
   activeSignaturePng = null;
   fileInput.value = '';
+  clearRendererDoc();
   
   btnSign.classList.add('hidden');
   btnExport.classList.add('hidden');
+  zoomControls.classList.add('hidden');
+  zoomControls.classList.remove('flex');
   btnExport.classList.remove('animate-pulse', 'ring-2', 'ring-emerald-400');
   btnSign.classList.remove('animate-pulse');
   
@@ -239,18 +265,18 @@ const handleFile = async (file: File) => {
     return;
   }
   
+  clearRendererDoc();
   container.classList.remove('justify-center');
   container.innerHTML = '<div class="text-indigo-400 mt-20 animate-pulse font-mono text-sm">Loading document...</div>';
   
   try {
     rawPdfBuffer = await file.arrayBuffer();
-    await renderDocument(rawPdfBuffer.slice(0), container);
+    await renderPdfWithZoom();
     
-    // Reveal action buttons
     btnSign.classList.remove('hidden');
     btnExport.classList.remove('hidden');
-    
-    // Add pulsing call-to-action ring to the sign button
+    zoomControls.classList.remove('hidden');
+    zoomControls.classList.add('flex');
     btnSign.classList.add('animate-pulse');
 
     const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
@@ -261,6 +287,43 @@ const handleFile = async (file: File) => {
     container.innerHTML = '<div class="text-red-400 mt-20 font-mono text-sm">Error: Could not read the document.</div>';
   }
 };
+
+// Keyboard Shortcuts: Delete selected signature, Escape to close modals or cancel placement
+window.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Escape') {
+    if (activeSignaturePng) {
+      activeSignaturePng = null;
+      cursorTooltip.classList.add('hidden');
+      container.classList.remove('cursor-crosshair');
+      hideNotification();
+    }
+    if (!successModal.classList.contains('hidden')) {
+      successModal.classList.add('hidden');
+    }
+    setSelectedSignature(null);
+  }
+
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSigWrapper) {
+    // Only delete if we are not typing inside an input
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
+      selectedSigWrapper.remove();
+      setSelectedSignature(null);
+    }
+  }
+});
+
+btnZoomIn.addEventListener('click', () => {
+  if (currentScale < 2.5) renderPdfWithZoom(Math.min(2.5, currentScale + 0.15));
+});
+
+btnZoomOut.addEventListener('click', () => {
+  if (currentScale > 0.4) renderPdfWithZoom(Math.max(0.4, currentScale - 0.15));
+});
+
+btnZoomFit.addEventListener('click', () => {
+  renderPdfWithZoom();
+});
 
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
@@ -346,9 +409,11 @@ btnExport.addEventListener('click', async () => {
 
 container.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
-  
   if (target.closest('.sig-wrapper')) return;
   
+  // Deselect signature if clicking canvas background
+  setSelectedSignature(null);
+
   const pageWrapper = target.closest('.page-wrapper') as HTMLElement;
   
   if (!activeSignaturePng) {
@@ -363,69 +428,16 @@ container.addEventListener('click', (e) => {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     
-    const sigWrapper = document.createElement('div');
-    sigWrapper.className = 'absolute cursor-move border-2 border-transparent hover:border-indigo-500/50 rounded transition-colors z-20 sig-wrapper touch-none select-none';
-    
-    sigWrapper.style.left = `${x - 75}px`; 
-    sigWrapper.style.top = `${y - 40}px`;
-    sigWrapper.style.width = '150px'; 
-    sigWrapper.style.height = '80px';
-    sigWrapper.style.resize = 'both';
-    sigWrapper.style.overflow = 'hidden';
-    sigWrapper.style.minWidth = '50px';
-    sigWrapper.style.minHeight = '30px';
-    
-    const sigImg = document.createElement('img');
-    sigImg.src = activeSignaturePng;
-    sigImg.className = 'w-full h-full object-contain pointer-events-none select-none';
-    sigImg.draggable = false;
-    
-    sigWrapper.appendChild(sigImg);
-    
-    let isDragging = false;
-    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
-    
-    sigWrapper.addEventListener('pointerdown', (dragEvent: PointerEvent) => {
-      const wrapRect = sigWrapper.getBoundingClientRect();
-      const isResizeZone = dragEvent.clientX >= wrapRect.right - 24 && dragEvent.clientY >= wrapRect.bottom - 24;
-      if (isResizeZone) return; 
-      
-      dragEvent.preventDefault();
-      dragEvent.stopPropagation();
-      
-      isDragging = true;
-      startX = dragEvent.clientX;
-      startY = dragEvent.clientY;
-      startLeft = parseInt(sigWrapper.style.left || '0', 10);
-      startTop = parseInt(sigWrapper.style.top || '0', 10);
-      
-      sigWrapper.setPointerCapture(dragEvent.pointerId);
-    });
-    
-    sigWrapper.addEventListener('pointermove', (moveEvent: PointerEvent) => {
-      if (!isDragging) return;
-      moveEvent.preventDefault();
-      
-      const dx = moveEvent.clientX - startX;
-      const dy = moveEvent.clientY - startY;
-      sigWrapper.style.left = `${startLeft + dx}px`;
-      sigWrapper.style.top = `${startTop + dy}px`;
-    });
-    
-    const stopDragging = (endEvent: PointerEvent) => {
-      if (!isDragging) return;
-      isDragging = false;
-      try {
-        sigWrapper.releasePointerCapture(endEvent.pointerId);
-      } catch {
-        // Ignored if already released
-      }
-    };
-
-    sigWrapper.addEventListener('pointerup', stopDragging);
-    sigWrapper.addEventListener('pointercancel', stopDragging);
+    const sigWrapper = createSignatureElement(
+      x - 75,
+      y - 40,
+      150,
+      80,
+      activeSignaturePng
+    );
     
     pageWrapper.appendChild(sigWrapper);
+    setSelectedSignature(sigWrapper);
     
     activeSignaturePng = null;
     cursorTooltip.classList.add('hidden');

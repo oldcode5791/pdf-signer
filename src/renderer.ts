@@ -6,6 +6,17 @@ export interface RenderOptions {
 }
 
 let currentPdfDoc: pdfjsLib.PDFDocumentProxy | null = null;
+export let selectedSigWrapper: HTMLElement | null = null;
+
+export const setSelectedSignature = (el: HTMLElement | null) => {
+  if (selectedSigWrapper && selectedSigWrapper !== el) {
+    selectedSigWrapper.classList.remove('ring-2', 'ring-indigo-400');
+  }
+  selectedSigWrapper = el;
+  if (selectedSigWrapper) {
+    selectedSigWrapper.classList.add('ring-2', 'ring-indigo-400');
+  }
+};
 
 export const renderDocument = async (
   pdfData: ArrayBuffer,
@@ -51,15 +62,13 @@ export const renderDocument = async (
   if (!scale) {
     const firstPage = await currentPdfDoc.getPage(1);
     const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
-    const availableWidth = container.clientWidth - 64; // account for container padding
+    const availableWidth = container.clientWidth - 64;
     const availableHeight = container.clientHeight - 64;
 
     const scaleW = availableWidth / unscaledViewport.width;
     const scaleH = availableHeight / unscaledViewport.height;
 
-    // Pick the smaller ratio so the entire page fits comfortably without scrolling
     scale = Math.min(scaleW, scaleH, 1.5); 
-    // Guard against excessively tiny scales on small viewports
     if (scale < 0.35) scale = 0.35;
   }
 
@@ -88,25 +97,13 @@ export const renderDocument = async (
     // Reattach any saved signatures scaled proportionally
     const pageSigs = existingSignatures.filter(s => s.pageIndex === pageNum - 1);
     pageSigs.forEach(sig => {
-      const sigWrapper = document.createElement('div');
-      sigWrapper.className = 'absolute cursor-move border-2 border-transparent hover:border-indigo-500/50 rounded transition-colors z-20 sig-wrapper touch-none select-none';
-      
-      sigWrapper.style.left = `${sig.leftPct * viewport.width}px`;
-      sigWrapper.style.top = `${sig.topPct * viewport.height}px`;
-      sigWrapper.style.width = `${sig.widthPct * viewport.width}px`;
-      sigWrapper.style.height = `${sig.heightPct * viewport.height}px`;
-      sigWrapper.style.resize = 'both';
-      sigWrapper.style.overflow = 'hidden';
-      sigWrapper.style.minWidth = '50px';
-      sigWrapper.style.minHeight = '30px';
-
-      const sigImg = document.createElement('img');
-      sigImg.src = sig.imgSrc;
-      sigImg.className = 'w-full h-full object-contain pointer-events-none select-none';
-      sigImg.draggable = false;
-
-      sigWrapper.appendChild(sigImg);
-      attachPointerDrag(sigWrapper);
+      const sigWrapper = createSignatureElement(
+        sig.leftPct * viewport.width,
+        sig.topPct * viewport.height,
+        sig.widthPct * viewport.width,
+        sig.heightPct * viewport.height,
+        sig.imgSrc
+      );
       pageWrapper.appendChild(sigWrapper);
     });
 
@@ -118,26 +115,58 @@ export const renderDocument = async (
 
 export const clearRendererDoc = () => {
   currentPdfDoc = null;
+  selectedSigWrapper = null;
 };
 
-// Reusable pointer drag handler for signatures
-export const attachPointerDrag = (sigWrapper: HTMLElement) => {
+// Builder function for signature boxes with drag, mobile resize grip, and selection state
+export const createSignatureElement = (
+  leftPx: number,
+  topPx: number,
+  widthPx: number,
+  heightPx: number,
+  imgSrc: string
+): HTMLElement => {
+  const sigWrapper = document.createElement('div');
+  sigWrapper.className = 'absolute cursor-move border-2 border-indigo-400/40 hover:border-indigo-500 rounded-lg transition-colors z-20 sig-wrapper touch-none select-none group';
+  
+  sigWrapper.style.left = `${leftPx}px`; 
+  sigWrapper.style.top = `${topPx}px`;
+  sigWrapper.style.width = `${Math.max(60, widthPx)}px`; 
+  sigWrapper.style.height = `${Math.max(30, heightPx)}px`;
+  sigWrapper.tabIndex = 0;
+
+  const sigImg = document.createElement('img');
+  sigImg.src = imgSrc;
+  sigImg.className = 'w-full h-full object-contain pointer-events-none select-none';
+  sigImg.draggable = false;
+  sigWrapper.appendChild(sigImg);
+
+  // Dedicated touch/mouse resize corner grip
+  const resizeGrip = document.createElement('div');
+  resizeGrip.className = 'absolute bottom-0 right-0 w-6 h-6 flex items-center justify-center cursor-nwse-resize text-indigo-400 hover:text-white bg-slate-900/60 rounded-tl-md border-t border-l border-indigo-400/30 touch-none';
+  resizeGrip.innerHTML = `
+    <svg class="w-3 h-3 pointer-events-none" fill="currentColor" viewBox="0 0 10 10">
+      <path d="M8 2 L8 8 L2 8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+    </svg>
+  `;
+  sigWrapper.appendChild(resizeGrip);
+
+  // Pointer drag for repositioning
   let isDragging = false;
   let startX = 0, startY = 0, startLeft = 0, startTop = 0;
 
   sigWrapper.addEventListener('pointerdown', (dragEvent: PointerEvent) => {
-    const wrapRect = sigWrapper.getBoundingClientRect();
-    const isResizeZone = dragEvent.clientX >= wrapRect.right - 24 && dragEvent.clientY >= wrapRect.bottom - 24;
-    if (isResizeZone) return;
-
+    if (dragEvent.target === resizeGrip) return;
     dragEvent.preventDefault();
     dragEvent.stopPropagation();
+
+    setSelectedSignature(sigWrapper);
 
     isDragging = true;
     startX = dragEvent.clientX;
     startY = dragEvent.clientY;
-    startLeft = parseInt(sigWrapper.style.left || '0', 10);
-    startTop = parseInt(sigWrapper.style.top || '0', 10);
+    startLeft = parseFloat(sigWrapper.style.left || '0');
+    startTop = parseFloat(sigWrapper.style.top || '0');
 
     sigWrapper.setPointerCapture(dragEvent.pointerId);
   });
@@ -145,11 +174,8 @@ export const attachPointerDrag = (sigWrapper: HTMLElement) => {
   sigWrapper.addEventListener('pointermove', (moveEvent: PointerEvent) => {
     if (!isDragging) return;
     moveEvent.preventDefault();
-
-    const dx = moveEvent.clientX - startX;
-    const dy = moveEvent.clientY - startY;
-    sigWrapper.style.left = `${startLeft + dx}px`;
-    sigWrapper.style.top = `${startTop + dy}px`;
+    sigWrapper.style.left = `${startLeft + (moveEvent.clientX - startX)}px`;
+    sigWrapper.style.top = `${startTop + (moveEvent.clientY - startY)}px`;
   });
 
   const stopDragging = (endEvent: PointerEvent) => {
@@ -157,11 +183,50 @@ export const attachPointerDrag = (sigWrapper: HTMLElement) => {
     isDragging = false;
     try {
       sigWrapper.releasePointerCapture(endEvent.pointerId);
-    } catch {
-      // Ignored if already released
-    }
+    } catch {}
   };
 
   sigWrapper.addEventListener('pointerup', stopDragging);
   sigWrapper.addEventListener('pointercancel', stopDragging);
+
+  // Pointer resize for mobile touch and desktop drag
+  let isResizing = false;
+  let initialW = 0, initialH = 0, rStartX = 0, rStartY = 0;
+
+  resizeGrip.addEventListener('pointerdown', (e: PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setSelectedSignature(sigWrapper);
+
+    isResizing = true;
+    rStartX = e.clientX;
+    rStartY = e.clientY;
+    initialW = sigWrapper.offsetWidth;
+    initialH = sigWrapper.offsetHeight;
+
+    resizeGrip.setPointerCapture(e.pointerId);
+  });
+
+  resizeGrip.addEventListener('pointermove', (e: PointerEvent) => {
+    if (!isResizing) return;
+    e.preventDefault();
+    const newW = Math.max(50, initialW + (e.clientX - rStartX));
+    const newH = Math.max(25, initialH + (e.clientY - rStartY));
+    sigWrapper.style.width = `${newW}px`;
+    sigWrapper.style.height = `${newH}px`;
+  });
+
+  const stopResizing = (e: PointerEvent) => {
+    if (!isResizing) return;
+    isResizing = false;
+    try {
+      resizeGrip.releasePointerCapture(e.pointerId);
+    } catch {}
+  };
+
+  resizeGrip.addEventListener('pointerup', stopResizing);
+  resizeGrip.addEventListener('pointercancel', stopResizing);
+
+  return sigWrapper;
 };
