@@ -163,7 +163,8 @@ const btnSignAnother = document.getElementById('btn-sign-another') as HTMLButton
 const btnKeepEditing = document.getElementById('btn-keep-editing') as HTMLButtonElement;
 
 let activeSignaturePng: string | null = null;
-export let rawPdfBuffer: ArrayBuffer | null = null; 
+// Store bytes persistently as a Uint8Array so it can never be detached
+export let storedPdfBytes: Uint8Array | null = null; 
 let currentScale = 1.0;
 let toastTimer: number | null = null;
 
@@ -199,13 +200,14 @@ const updateZoomLabel = () => {
 };
 
 const renderPdfWithZoom = async (targetScale?: number) => {
-  if (!rawPdfBuffer) return;
-  currentScale = await renderDocument(rawPdfBuffer, container, targetScale);
+  if (!storedPdfBytes) return;
+  // Always create a fresh buffer slice for rendering
+  currentScale = await renderDocument(storedPdfBytes.slice().buffer, container, targetScale);
   updateZoomLabel();
 };
 
 const resetToHome = () => {
-  rawPdfBuffer = null;
+  storedPdfBytes = null;
   activeSignaturePng = null;
   fileInput.value = '';
   clearRendererDoc();
@@ -270,7 +272,10 @@ const handleFile = async (file: File) => {
   container.innerHTML = '<div class="text-indigo-400 mt-20 animate-pulse font-mono text-sm">Loading document...</div>';
   
   try {
-    rawPdfBuffer = await file.arrayBuffer();
+    const rawBuffer = await file.arrayBuffer();
+    // Persist as a Uint8Array copy so the buffer is permanently retained in memory
+    storedPdfBytes = new Uint8Array(rawBuffer);
+
     await renderPdfWithZoom();
     
     btnSign.classList.remove('hidden');
@@ -288,7 +293,6 @@ const handleFile = async (file: File) => {
   }
 };
 
-// Keyboard Shortcuts: Delete selected signature, Escape to close modals or cancel placement
 window.addEventListener('keydown', (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
     if (activeSignaturePng) {
@@ -340,7 +344,7 @@ fileInput.addEventListener('change', (e) => {
 });
 
 btnHome.addEventListener('click', () => {
-  if (rawPdfBuffer && !confirm('Are you sure you want to close this document and return home?')) {
+  if (storedPdfBytes && !confirm('Are you sure you want to close this document and return home?')) {
     return;
   }
   resetToHome();
@@ -388,19 +392,19 @@ btnSign.addEventListener('click', async () => {
 });
 
 btnExport.addEventListener('click', async () => {
-  if (!rawPdfBuffer) return;
+  if (!storedPdfBytes) return;
   
   btnExport.classList.remove('animate-pulse', 'ring-2', 'ring-emerald-400');
   btnExport.textContent = 'Processing...';
   btnExport.classList.add('opacity-75', 'cursor-not-allowed');
   
   try {
-    // Pass a fresh clone so buffer detachment never occurs
-    await exportSignedPdf(rawPdfBuffer.slice(0));
+    // Pass a fresh Uint8Array copy so the buffer can never be detached
+    await exportSignedPdf(storedPdfBytes.slice());
     successModal.classList.remove('hidden');
-  } catch (err) {
-    console.error('Export failure diagnostic:', err);
-    alert('Something went wrong while saving the PDF. Check console for details.');
+  } catch (err: any) {
+    console.error('Export error diagnostic:', err);
+    alert(`Could not export PDF: ${err?.message || err}`);
   } finally {
     btnExport.textContent = 'Export PDF';
     btnExport.classList.remove('opacity-75', 'cursor-not-allowed');
@@ -411,13 +415,12 @@ container.addEventListener('click', (e) => {
   const target = e.target as HTMLElement;
   if (target.closest('.sig-wrapper')) return;
   
-  // Deselect signature if clicking canvas background
   setSelectedSignature(null);
 
   const pageWrapper = target.closest('.page-wrapper') as HTMLElement;
   
   if (!activeSignaturePng) {
-    if (pageWrapper && rawPdfBuffer) {
+    if (pageWrapper && storedPdfBytes) {
       btnSign.click();
     }
     return;
