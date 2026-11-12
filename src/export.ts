@@ -1,87 +1,74 @@
 import { PDFDocument } from 'pdf-lib';
 
-export async function exportSignedPdf(originalBuffer: ArrayBuffer) {
-  // Load a fresh copy of the PDF into the editor tool
-  const pdfDoc = await PDFDocument.load(originalBuffer.slice(0));
-  const pages = pdfDoc.getPages();
+export const exportSignedPdf = async (rawBuffer: ArrayBuffer) => {
+  // Always create a clean copy of the ArrayBuffer so pdf-lib never hits a detached buffer
+  const pdfBytes = rawBuffer.slice(0);
+  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
 
-  // Find all the pages shown on the screen
   const pageWrappers = document.querySelectorAll('.page-wrapper');
 
-  // Loop through every page on the screen one by one
   for (let i = 0; i < pageWrappers.length; i++) {
-    const wrapper = pageWrappers[i] as HTMLElement;
+    const pageWrapper = pageWrappers[i] as HTMLElement;
+    const pageNum = parseInt(pageWrapper.dataset.pageNumber || `${i + 1}`, 10);
+    const pdfPage = pdfDoc.getPage(pageNum - 1);
     
-    // Find out which page number we are looking at
-    const pageIndex = parseInt(wrapper.dataset.pageNumber || '1', 10) - 1;
+    // Physical dimensions of the PDF page in points (72 DPI)
+    const { width: pdfWidth, height: pdfHeight } = pdfPage.getSize();
     
-    // Safety check to make sure the page exists
-    if (pageIndex < 0 || pageIndex >= pages.length) continue;
-    
-    const pdfPage = pages[pageIndex];
-    
-    // Get the size of the real PDF page
-    const pdfWidth = pdfPage.getWidth();
-    const pdfHeight = pdfPage.getHeight();
-    
-    // Get the size of the webpage box showing the PDF
-    const domWidth = wrapper.offsetWidth;
-    const domHeight = wrapper.offsetHeight;
+    // Rendered on-screen dimensions of the page wrapper
+    const wrapperRect = pageWrapper.getBoundingClientRect();
+    if (wrapperRect.width === 0 || wrapperRect.height === 0) continue;
 
-    // Look for all the signatures that were dropped onto this specific page
-    const signatures = wrapper.querySelectorAll('.sig-wrapper');
-    
-    // Loop through all the signatures on this page
-    for (let j = 0; j < signatures.length; j++) {
-      const sigWrap = signatures[j] as HTMLElement;
-      const img = sigWrap.querySelector('img') as HTMLImageElement;
-      
-      // Take the picture from the screen and convert it into raw computer code so the PDF understands it
-      const imgResponse = await fetch(img.src);
-      const imgArrayBuffer = await imgResponse.arrayBuffer();
-      const pngImage = await pdfDoc.embedPng(imgArrayBuffer);
-      
-      // Calculate the size difference between the small screen and the large PDF file
-      const scaleX = pdfWidth / domWidth;
-      const scaleY = pdfHeight / domHeight;
-      
-      // Multiply the screen size of the signature by the scale to get the real PDF size
-      const pdfImgWidth = sigWrap.offsetWidth * scaleX;
-      const pdfImgHeight = sigWrap.offsetHeight * scaleY;
-      
-      // Figure out the X (left to right) position
-      const pdfImgX = sigWrap.offsetLeft * scaleX;
-      
-      // Figure out the Y (top to bottom) position.
-      // Math Trick: Websites measure from the top down. PDFs measure from the bottom up!
-      // So we have to flip the Y math backwards so it doesn't print upside down.
-      const pdfImgY = pdfHeight - (sigWrap.offsetTop * scaleY) - pdfImgHeight;
-      
-      // Bake the signature into the actual PDF code permanently
-      pdfPage.drawImage(pngImage, {
-        x: pdfImgX,
-        y: pdfImgY,
-        width: pdfImgWidth,
-        height: pdfImgHeight,
+    const scaleX = pdfWidth / wrapperRect.width;
+    const scaleY = pdfHeight / wrapperRect.height;
+
+    const sigWrappers = pageWrapper.querySelectorAll('.sig-wrapper');
+
+    for (let j = 0; j < sigWrappers.length; j++) {
+      const sigEl = sigWrappers[j] as HTMLElement;
+      const img = sigEl.querySelector('img');
+      if (!img || !img.src) continue;
+
+      // Extract raw base64 PNG data
+      const base64Data = img.src.split(',')[1];
+      if (!base64Data) continue;
+
+      const imageBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+      const embeddedImage = await pdfDoc.embedPng(imageBytes);
+
+      // On-screen offsets relative to the page wrapper
+      const elLeft = parseFloat(sigEl.style.left || '0');
+      const elTop = parseFloat(sigEl.style.top || '0');
+      const elWidth = parseFloat(sigEl.style.width || `${sigEl.offsetWidth}`);
+      const elHeight = parseFloat(sigEl.style.height || `${sigEl.offsetHeight}`);
+
+      // Translate HTML coordinates (top-left origin) to PDF coordinates (bottom-left origin)
+      const pdfX = elLeft * scaleX;
+      const pdfW = elWidth * scaleX;
+      const pdfH = elHeight * scaleY;
+      const pdfY = pdfHeight - ((elTop + elHeight) * scaleY);
+
+      pdfPage.drawImage(embeddedImage, {
+        x: pdfX,
+        y: pdfY,
+        width: pdfW,
+        height: pdfH,
       });
     }
   }
 
-  // Save all our changes and turn it back into a finished file
-  const pdfBytes = await pdfDoc.save();
-
-  // The rest of this code tricks the web browser into downloading the file to your computer
-  // @ts-ignore
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
+  const modifiedPdfBytes = await pdfDoc.save();
   
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'signed_document.pdf'; // This is what the downloaded file will be called
-  document.body.appendChild(link);
-  link.click();
+  // Cast buffer to ArrayBuffer to satisfy Blob constructor typings in modern TypeScript
+  const blob = new Blob([modifiedPdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+  const blobUrl = URL.createObjectURL(blob);
   
-  // Clean up the trick when finished
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
+  const downloadLink = document.createElement('a');
+  downloadLink.href = blobUrl;
+  downloadLink.download = 'signed_document.pdf';
+  document.body.appendChild(downloadLink);
+  downloadLink.click();
+  document.body.removeChild(downloadLink);
+  
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+};
