@@ -1,7 +1,14 @@
 import { PDFDocument } from 'pdf-lib';
 
+/**
+ * Embeds all placed PNG signature overlays directly into the underlying PDF page coordinate
+ * space using pdf-lib, translating browser top-left CSS pixels into PDF bottom-left points,
+ * and triggers a local client-side download of `signed_document.pdf`.
+ *
+ * @param rawBytes - Fresh Uint8Array copy of the original uploaded PDF binary
+ */
 export const exportSignedPdf = async (rawBytes: Uint8Array) => {
-  // Load directly from fresh Uint8Array bytes
+  // Load original PDF structure in browser memory (tolerating owner-permission flags)
   const pdfDoc = await PDFDocument.load(rawBytes, { ignoreEncryption: true });
 
   const pageWrappers = document.querySelectorAll('.page-wrapper');
@@ -10,10 +17,11 @@ export const exportSignedPdf = async (rawBytes: Uint8Array) => {
     const pageWrapper = pageWrappers[i] as HTMLElement;
     const pageNum = parseInt(pageWrapper.dataset.pageNumber || `${i + 1}`, 10);
     const pdfPage = pdfDoc.getPage(pageNum - 1);
-    
+
+    // Compute scale ratios between PDF point dimensions and rendered DOM pixel dimensions
     const { width: pdfWidth, height: pdfHeight } = pdfPage.getSize();
     const wrapperRect = pageWrapper.getBoundingClientRect();
-    
+
     if (wrapperRect.width === 0 || wrapperRect.height === 0) continue;
 
     const scaleX = pdfWidth / wrapperRect.width;
@@ -26,6 +34,7 @@ export const exportSignedPdf = async (rawBytes: Uint8Array) => {
       const img = sigEl.querySelector('img');
       if (!img || !img.src) continue;
 
+      // Decode base64 PNG Data URI into raw Uint8Array bytes for pdf-lib embedding
       const base64Parts = img.src.split(',');
       const base64Data = base64Parts[1];
       if (!base64Data) continue;
@@ -44,10 +53,11 @@ export const exportSignedPdf = async (rawBytes: Uint8Array) => {
       const elWidth = parseFloat(sigEl.style.width || `${sigEl.offsetWidth}`);
       const elHeight = parseFloat(sigEl.style.height || `${sigEl.offsetHeight}`);
 
+      // Convert top-left screen coordinates into bottom-left PDF coordinate space
       const pdfX = Math.max(0, elLeft * scaleX);
       const pdfW = Math.max(10, elWidth * scaleX);
       const pdfH = Math.max(10, elHeight * scaleY);
-      const pdfY = Math.max(0, pdfHeight - ((elTop + elHeight) * scaleY));
+      const pdfY = Math.max(0, pdfHeight - (elTop + elHeight) * scaleY);
 
       pdfPage.drawImage(embeddedImage, {
         x: pdfX,
@@ -58,18 +68,17 @@ export const exportSignedPdf = async (rawBytes: Uint8Array) => {
     }
   }
 
+  // Serialize modified PDF binary and trigger immediate browser file download
   const modifiedPdfBytes = await pdfDoc.save();
-  
-  // Safe Blob instantiation compatible with all browser TypeScript targets
   const blob = new Blob([new Uint8Array(modifiedPdfBytes)], { type: 'application/pdf' });
   const blobUrl = URL.createObjectURL(blob);
-  
+
   const downloadLink = document.createElement('a');
   downloadLink.href = blobUrl;
   downloadLink.download = 'signed_document.pdf';
   document.body.appendChild(downloadLink);
   downloadLink.click();
   document.body.removeChild(downloadLink);
-  
+
   setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
 };

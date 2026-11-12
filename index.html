@@ -1,23 +1,29 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <!-- Cache-busted dark-slate & cyan SVG favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PDF Signer Core — 100% Private, Browser-Based PDF Signing</title>
-    <meta name="description" content="Sign PDF documents securely directly in your browser. Zero tracking, zero uploads, 100% free and private." />
-    
-    <!-- Open Graph / Social Sharing Meta Tags -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="PDF Signer Core — 100% Private PDF Signing" />
-    <meta property="og:description" content="Sign PDF documents securely without accounts, servers, or subscription traps." />
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:title" content="PDF Signer Core" />
-    <meta name="twitter:description" content="Sign PDF documents directly in your browser with zero data uploads." />
+    <title>Client-Side PDF Signer — 100% Private Browser Signing | the-lal.net</title>
+    <meta
+      name="description"
+      content="Sign, date, and annotate PDF documents directly in your browser. Powered by pdf-lib and PDF.js with 100% local processing and zero cloud uploads."
+    />
+    <link rel="canonical" href="https://pdf-signer.the-lal.net/" />
 
-    <!-- Inlined SVG Favicon (No external file needed) -->
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%236366f1'><path d='M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+    <!-- OpenGraph & Social Card Metadata -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Client-Side PDF Signer — Zero-Upload Browser Signing" />
+    <meta
+      property="og:description"
+      content="Draw or type signatures and flatten them directly into PDF documents inside your browser sandbox with zero server uploads."
+    />
+    <meta property="og:url" content="https://pdf-signer.the-lal.net/" />
+    <meta property="og:image" content="https://apps.the-lal.net/images/pdf-signer.svg" />
+    <meta name="twitter:card" content="summary_large_image" />
   </head>
-  <body class="bg-slate-900 overflow-hidden antialiased select-none">
+  <body class="bg-slate-950 text-slate-100 overflow-hidden antialiased select-none">
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
