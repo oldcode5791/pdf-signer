@@ -304,7 +304,6 @@ window.addEventListener('keydown', (e: KeyboardEvent) => {
   }
 
   if ((e.key === 'Delete' || e.key === 'Backspace') && selectedSigWrapper) {
-    // Only delete if we are not typing inside an input
     const tag = (e.target as HTMLElement).tagName;
     if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
       selectedSigWrapper.remove();
@@ -396,11 +395,12 @@ btnExport.addEventListener('click', async () => {
   btnExport.classList.add('opacity-75', 'cursor-not-allowed');
   
   try {
-    await exportSignedPdf(rawPdfBuffer);
+    // Pass a fresh clone so buffer detachment never occurs
+    await exportSignedPdf(rawPdfBuffer.slice(0));
     successModal.classList.remove('hidden');
   } catch (err) {
-    console.error(err);
-    alert('Something went wrong while saving the PDF.');
+    console.error('Export failure diagnostic:', err);
+    alert('Something went wrong while saving the PDF. Check console for details.');
   } finally {
     btnExport.textContent = 'Export PDF';
     btnExport.classList.remove('opacity-75', 'cursor-not-allowed');
